@@ -75,8 +75,8 @@
       na_ontap_quotas:
         volume:  "{{ volume_name }}"
         quota_target: "/{{ volume_name }}/{{ volume_share }}"
-        type: qtree
-        qtree: {{ volume_share }}
+        type: tree
+        qtree: "{{ volume_share }}"
         policy: "pol-{{ volume_share }}"
         disk_limit: "{{ qtree_gb_size }}GB"
         set_quota_status: True
