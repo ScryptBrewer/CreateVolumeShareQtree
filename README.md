@@ -21,22 +21,22 @@ Create a new netapp encrypted volume, qtree, share, set permissions on share, an
    - Install prerequisites
    - Configure storage for ansible
    - Clone repo
-   - Review the AnsibleVolShare.yml
+   - Review the AnsibleVolQtreeShare.yml
    - Update secret.yml, uservars.yml, defaultvars.yml
 
 
 ## Usage examples:
 Basic play with all vars in var files
 
-***ansible-playbook AnsibleVolShare.yml***
+***ansible-playbook AnsibleVolQtreeShare.yml***
 
 Remove volume and other things from the play above
 
-***ansible-playbook AnsibleVolShare.yml --extra-vars="state=absent"***
+***ansible-playbook AnsibleVolQtreeShare.yml --extra-vars="state=absent"***
 
 To skip using the NTFS and share hardening use the following
 
-***ansible-playbook AnsibleVolShare.yml --skip-tags=harden***
+***ansible-playbook AnsibleVolQtreeShare.yml --skip-tags=harden***
 
 ***currently there are these tags avalible:
     - harden            # Skips sections that create ntfs group rights 
@@ -45,7 +45,7 @@ To skip using the NTFS and share hardening use the following
     - no-quota          # Does not create hard quota limit on the qtree
 
 ##### Multiple varibles can be combined to execute a command vs updating each time the play is used.
-***ansible-playbook AnsibleVolShare.yml --extra-vars="svm='svm01',volume_name='vol02',volume_share='Qtree12',aggr='agggr1',qtree_gb_size=4,vol_gb_size=50,netapp_hostname='Cluster02',netapp_username='Ansible-admin',netapp_password='Ansibe-password',useradmin_acct='AD-UserAdminGroup',usergroup_acct='ADUSERSGRP01',vol_qospolicy='extreme'"***
+***ansible-playbook AnsibleVolQtreeShare.yml --extra-vars="svm='svm01',volume_name='vol02',volume_share='Qtree12',aggr='agggr1',qtree_gb_size=4,vol_gb_size=50,netapp_hostname='Cluster02',netapp_username='Ansible-admin',netapp_password='Ansibe-password',useradmin_acct='AD-UserAdminGroup',usergroup_acct='ADUSERSGRP01',vol_qospolicy='extreme'"***
 
 
 Note: the NVE encryption flag has been set to true by default. set encrypt="false" if this is not the desired behavior.
