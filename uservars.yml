@@ -1,0 +1,26 @@
+---
+# User varibles per config
+svm: "VirtualServer01"
+
+# Name of the volume to create Qtree under
+volume_name: "VolumeName"
+
+#Name of Qtree and Share name
+volume_share: "VolumeAndShareName"
+aggr: "AggreagateName"
+
+# When volume does not exist size to create as
+vol_gb_size: 10
+
+#Qtree quota on the qtree to limit space used  
+qtree_gb_size: 3
+
+# If Storage admins use alternate group for access it goes here
+storageadmin_acct: "BUILTIN\\Administrators"
+
+# This user group must be update to Adminisrators if not used for user admin of permissions on share
+useradmin_acct: "AD-UserAdminGroup"
+
+# If using the Harden flag its recomended this var be updated to a targeted ad user group 
+usergroup_acct: "BUILTIN\\Users"
+

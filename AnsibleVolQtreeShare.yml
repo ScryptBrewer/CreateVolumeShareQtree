@@ -1,0 +1,162 @@
+---
+- hosts: localhost
+  gather_facts: False
+
+  vars:
+    # The following define the commands use to control NTFS acls on the newly created volume path
+    minimum_ansible_version: 2.8.0
+    userperms:
+      storageadmin: {acct: "{{ storageadmin_acct }}", ntfs_rights: "full-control", share_permissions: "full_control"}
+      useradmin:    {acct: "{{ useradmin_acct }}", ntfs_rights: "full-control", share_permissions: "full_control"}
+      usergroup:    {acct: "{{ usergroup_acct }}", ntfs_rights: "modify", share_permissions: "change"}
+
+    hardenntfs: 
+      - "vserver,security,file-directory,policy,create,-vserver,{{ svm }},-policy-name,pol-{{ volume_share }}"
+      - "vserver,security,file-directory,ntfs,create,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }},-owner,{{ userperms['storageadmin'].acct }}"
+      - "vserver,security,file-directory,ntfs,dacl,add,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }},-access-type,allow,-account,{{ userperms['storageadmin']['acct'] }}, -apply-to,*,-advanced-rights,{{ userperms['storageadmin']['ntfs_rights'] }}"
+      - "vserver,security,file-directory,ntfs,dacl,add,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }},-access-type,allow,-account,{{ userperms['useradmin']['acct'] }},-apply-to,*,-advanced-rights,{{ userperms['useradmin']['ntfs_rights'] }}"
+      - "vserver,security,file-directory,ntfs,dacl,add,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }},-access-type,allow,-account,{{ userperms['usergroup']['acct'] }},-rights,{{ userperms['usergroup']['ntfs_rights'] }},-apply-to,*"
+      - "vserver,security,file-directory,ntfs,dacl,remove,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }},-access-type,allow,-account,BUILTIN\\Users"
+      - "vserver,security,file-directory,policy,task,add,-vserver,{{ svm }},-policy-name,pol-{{ volume_share }},-path,/{{ volume_name }}/{{ volume_share }},-ntfs-sd,pol-{{ volume_share }},-ntfs-mode,replace"
+      - "vserver,security,file-directory,apply,-vserver,{{ svm }},-policy-name,pol-{{ volume_share }}"
+
+    clean_up_harden:
+      - "vserver,security,file-directory,policy,delete,-vserver,{{ svm }},-policy-name,pol-{{ volume_share }}"
+      - "vserver,security,file-directory,ntfs,delete,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }}"
+
+
+  vars_files:
+    - secret.yml
+    - uservars.yml
+    - defaultvars.yml
+
+  tasks:
+    - name: Checking Ansible version
+      fail:
+        msg: "Ansible version is {{ ansible_version.full }}. Minimum version of Ansible required is is {{ minimum_ansible_version }}"
+      when: ansible_version.full is version(minimum_ansible_version, '<')
+
+    - name: Install required Netapp-Lib if not installed 
+      pip: 
+        name: Netapp-Lib
+      
+    - name: Create or remove FlexVol {{ volume_share }} with QoS adaptive
+      na_ontap_volume:
+        state: "{{ state }}"
+        name: "{{ volume_name }}"
+        junction_path: "/{{volume_name}}"
+        aggregate_name: "{{ aggr }}"
+        size: "{{ vol_gb_size }}"
+        size_unit: gb
+        encrypt: "{{ encrypt }}"
+        space_guarantee: "{{ vol_space_guarantee }}"
+        qos_adaptive_policy_group: "{{ vol_qospolicy }}"
+        vserver: "{{ svm }}"
+        wait_for_completion: True
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+
+    - name: Create Qtrees
+      na_ontap_qtree:
+        name: "{{ volume_share }}"
+        flexvol_name: "{{ volume_name }}"
+        export_policy: "{{ vol_export_policy }}"
+        security_style:  "{{ vol_security_style }}"
+        state: "{{ state }}"
+        vserver: "{{ svm }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      when: state == "present"
+
+    - name: Add Delete quota on qtree
+      tags: ['no-quota']
+      na_ontap_quotas:
+        volume:  "{{ volume_name }}"
+        quota_target: "/{{ volume_name }}/{{ volume_share }}"
+        type: qtree
+        qtree: {{ volume_share }}
+        policy: "pol-{{ volume_share }}"
+        disk_limit: "{{ qtree_gb_size }}GB"
+        set_quota_status: True
+        state: "{{ state }}"
+        vserver: "{{ svm }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+
+    - name: Create Remove CIFS share
+      tags: ['cifs_share']
+      na_ontap_cifs:
+        state: "{{ state }}"
+        share_name: "{{ volume_share }}"
+        path: "/{{ volume_name }}/{{ volume_share }}"
+        vserver: "{{ svm }}"
+        share_properties: "{{ share_properties }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+
+    - name: Remove Eveyone from share Permissions
+      tags: ['harden','cifs_share']
+      na_ontap_cifs_acl:
+        state: absent
+        share_name: "{{ volume_share }}"
+        user_or_group: Everyone
+        permission: change
+        vserver: "{{ svm }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      when: state == "present"
+
+    - name: Add explicit group to share
+      tags: ['harden', 'no-admin-access','cifs_share']
+      na_ontap_cifs_acl:
+        state: present
+        share_name: "{{ volume_share }}"
+        user_or_group: "{{ userperms['useradmin']['acct'] }}"
+        permission: "{{ userperms['useradmin']['share_permissions'] }}"
+        vserver: "{{ svm }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      when: state == "present"
+
+    - name: Add explicit group to share
+      tags: ['harden','cifs_share']    
+      na_ontap_cifs_acl:
+        state: present
+        share_name: "{{ volume_share }}"
+        user_or_group: "{{ userperms['usergroup']['acct'] }}"
+        permission: "{{ userperms['usergroup']['share_permissions'] }}"
+        vserver: "{{ svm }}"
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      when: state == "present"
+
+    - name: Set NTFS Security on Volumes
+      tags: ['harden']
+      na_ontap_command:
+        command: "{{ item }}"
+        privilege: 'admin'
+        return_dict: True
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      with_items: "{{ hardenntfs }}"
+      when: state == "present"
+
+    - name: Clean-up NTFS Security on Volumes
+      tags: ['harden']
+      na_ontap_command:
+        command: "{{ item }}"
+        privilege: 'admin'
+        return_dict: True
+        hostname: "{{ netapp_hostname }}"
+        username: "{{ netapp_username }}"
+        password: "{{ netapp_password }}"
+      with_items: "{{ clean_up_harden }}"
+      when: state == "absent"
