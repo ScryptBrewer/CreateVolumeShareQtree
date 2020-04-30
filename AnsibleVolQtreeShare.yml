@@ -24,6 +24,12 @@
       - "vserver,security,file-directory,policy,delete,-vserver,{{ svm }},-policy-name,pol-{{ volume_share }}"
       - "vserver,security,file-directory,ntfs,delete,-vserver,{{ svm }},-ntfs-sd,pol-{{ volume_share }}"
 
+    login: &login
+      hostname: "{{ netapp_hostname }}"
+      username: "{{ netapp_username }}"
+      password: "{{ netapp_password }}"
+      https: "{{ netapp_use_https }}"
+      validate_certs: "{{ netapp_validate_certs }}"   
 
   vars_files:
     - secret.yml
@@ -42,6 +48,7 @@
       
     - name: Create or remove FlexVol {{ volume_share }} with QoS adaptive
       na_ontap_volume:
+        <<: *login
         state: "{{ state }}"
         name: "{{ volume_name }}"
         junction_path: "/{{volume_name}}"
@@ -53,26 +60,23 @@
         qos_adaptive_policy_group: "{{ vol_qospolicy }}"
         vserver: "{{ svm }}"
         wait_for_completion: True
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
+
 
     - name: Create Qtrees
       na_ontap_qtree:
+        <<: *login
         name: "{{ volume_share }}"
         flexvol_name: "{{ volume_name }}"
         export_policy: "{{ vol_export_policy }}"
         security_style:  "{{ vol_security_style }}"
         state: "{{ state }}"
         vserver: "{{ svm }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       when: state == "present"
 
     - name: Add Delete quota on qtree
       tags: ['no-quota']
       na_ontap_quotas:
+        <<: *login
         volume:  "{{ volume_name }}"
         quota_target: "/{{ volume_name }}/{{ volume_share }}"
         type: tree
@@ -82,81 +86,67 @@
         set_quota_status: True
         state: "{{ state }}"
         vserver: "{{ svm }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
+
 
     - name: Create Remove CIFS share
       tags: ['cifs_share']
       na_ontap_cifs:
+        <<: *login
         state: "{{ state }}"
         share_name: "{{ volume_share }}"
         path: "/{{ volume_name }}/{{ volume_share }}"
         vserver: "{{ svm }}"
         share_properties: "{{ share_properties }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
 
     - name: Remove Eveyone from share Permissions
       tags: ['harden','cifs_share']
       na_ontap_cifs_acl:
+        <<: *login
         state: absent
         share_name: "{{ volume_share }}"
         user_or_group: Everyone
         permission: change
         vserver: "{{ svm }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       when: state == "present"
 
     - name: Add explicit group to share
       tags: ['harden', 'no-admin-access','cifs_share']
       na_ontap_cifs_acl:
+        <<: *login
         state: present
         share_name: "{{ volume_share }}"
         user_or_group: "{{ userperms['useradmin']['acct'] }}"
         permission: "{{ userperms['useradmin']['share_permissions'] }}"
         vserver: "{{ svm }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       when: state == "present"
 
     - name: Add explicit group to share
       tags: ['harden','cifs_share']    
       na_ontap_cifs_acl:
+        <<: *login
         state: present
         share_name: "{{ volume_share }}"
         user_or_group: "{{ userperms['usergroup']['acct'] }}"
         permission: "{{ userperms['usergroup']['share_permissions'] }}"
         vserver: "{{ svm }}"
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       when: state == "present"
 
     - name: Set NTFS Security on Volumes
       tags: ['harden']
       na_ontap_command:
+        <<: *login
         command: "{{ item }}"
         privilege: 'admin'
         return_dict: True
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       with_items: "{{ hardenntfs }}"
       when: state == "present"
 
     - name: Clean-up NTFS Security on Volumes
       tags: ['harden']
       na_ontap_command:
+        <<: *login
         command: "{{ item }}"
         privilege: 'admin'
         return_dict: True
-        hostname: "{{ netapp_hostname }}"
-        username: "{{ netapp_username }}"
-        password: "{{ netapp_password }}"
       with_items: "{{ clean_up_harden }}"
       when: state == "absent"

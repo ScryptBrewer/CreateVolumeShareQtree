@@ -15,3 +15,7 @@ share_properties: "browsable,oplocks,access-based-enumeration"
 
 # Present creates absent deletes
 state: "present"
+
+netapp_use_https: true
+# The optimal secure value is true however, it requires the installation of public certs
+netapp_validate_certs: false
